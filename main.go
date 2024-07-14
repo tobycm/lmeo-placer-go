@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	placePngUrl = "https://foloplace.tobycm.dev/place.png"
-	wsUrl       = "wss://foloplace.tobycm.dev/ws"
+	placePngUrl = "http://localhost:32983/place.png"
+	wsUrl       = "ws://localhost:32983/ws"
 )
 
 var (
@@ -31,7 +31,7 @@ func main() {
 		}
 	}
 
-	canvasImage, err := getPlacePng(placePngUrl)
+	canvasImage, err := GetCanvasImage(placePngUrl)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -61,8 +61,11 @@ func main() {
 		}
 	}
 
-	masterWs := PlaceWs{Url: wsUrl, AutoReconnect: true}
-	masterWs.Connect()
+	masterWs := PlaceWs{Url: wsUrl}
+	if err := masterWs.Connect(); err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	fmt.Println("Master websocket successfully connected")
 
@@ -76,38 +79,44 @@ func main() {
 				return
 			}
 
-			x := binary.BigEndian.Uint32(message[0:4])
-			y := binary.BigEndian.Uint32(message[4:8])
+			// fmt.Println("Received message:", message)
 
-			if x < uint32(offset[0]) || y < uint32(offset[1]) || x >= uint32(offset[0]+canvas.Width) || y >= uint32(offset[1]+canvas.Height) {
-				continue
+			for len(message) >= 11 {
+				x := binary.BigEndian.Uint32(message[0:4])
+				y := binary.BigEndian.Uint32(message[4:8])
+
+				if x < uint32(offset[0]) || y < uint32(offset[1]) || x >= uint32(offset[0]+canvas.Width) || y >= uint32(offset[1]+canvas.Height) {
+					message = message[11:]
+					continue
+				}
+
+				// fmt.Printf("Placed pixel at %d, %d\n", x, y)
+				r := message[8]
+				g := message[9]
+				b := message[10]
+
+				canvas.Set(int(x), int(y), r, g, b)
+
+				pr, pg, pb := place.At(int(x)-offset[0], int(y)-offset[1])
+
+				if r != pr || g != pg || b != pb {
+					works.Add(&Work{x: int(x), y: int(y), r: pr, g: pg, b: pb})
+				}
+
+				message = message[11:]
 			}
-
-			// fmt.Printf("Placed pixel at %d, %d\n", x, y)
-			r := message[8]
-			g := message[9]
-			b := message[10]
-
-			canvas.Set(int(x), int(y), r, g, b)
-
-			pr, pg, pb := place.At(int(x)-offset[0], int(y)-offset[1])
-
-			if r != pr || g != pg || b != pb {
-				works.Add(&Work{x: int(x), y: int(y), r: pr, g: pg, b: pb})
-			}
-
 		}
 	}()
 
 	// time.Sleep(5 * time.Second)
 
-	workers := 1
+	workers := 10
 
 	for i := 0; i < workers-1; i++ {
-		go worker(i, offset, &works)
+		go worker(i, &works)
 	}
 
 	fmt.Println("Works:", len(works.Queue))
 
-	worker(-1, offset, &works)
+	worker(-1, &works)
 }

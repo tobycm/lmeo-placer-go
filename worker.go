@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func worker(id int, offset [2]int, works *Works) {
+func worker(id int, works *Works) {
 	ws := PlaceWs{Url: wsUrl, AutoReconnect: true}
 	ws.Connect()
 

@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func getPlacePng(url string) (*image.Image, error) {
+func GetCanvasImage(url string) (*image.Image, error) {
 	response, err := http.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("error getting place.png: %w", err)
