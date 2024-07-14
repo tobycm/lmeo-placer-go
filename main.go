@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
+	_ "image/jpeg"
 	_ "image/png"
 	"net/http"
 	"os"
@@ -14,9 +15,9 @@ import (
 
 var placePngUrl = "https://foloplace.tobycm.dev/place.png"
 var wsUrl = "wss://foloplace.tobycm.dev/ws"
-var imagePath = "./dacloud 256.png"
+var imagePath = "./elysia smol.png"
 
-var offset = [2]int{200, 50} // starting point, [x, y]
+var offset = [2]int{200, 306} // starting point, [x, y]
 
 func getPlacePng(url string) (*image.Image, error) {
 	response, err := http.Get(url)
@@ -64,12 +65,35 @@ func loadImage(path string) (*image.Image, error) {
 type Canvas struct {
 	Width  int
 	Height int
-	Data   *image.Image
+	Data   []byte
 }
 
-var canvas Canvas
+func (canvas *Canvas) FromImage(img *image.Image) {
+	canvas.Width = (*img).Bounds().Dx()
+	canvas.Height = (*img).Bounds().Dy()
+	canvas.Data = make([]byte, canvas.Width*canvas.Height*3)
+
+	for y := 0; y < canvas.Height; y++ {
+		for x := 0; x < canvas.Width; x++ {
+			r, g, b, _ := (*img).At(x, y).RGBA()
+			r = r >> 8
+			g = g >> 8
+			b = b >> 8
+
+			canvas.Data[(y*canvas.Width+x)*3] = uint8(r)
+			canvas.Data[(y*canvas.Width+x)*3+1] = uint8(g)
+			canvas.Data[(y*canvas.Width+x)*3+2] = uint8(b)
+		}
+	}
+}
+
+func (canvas *Canvas) At(x, y int) (uint8, uint8, uint8) {
+	return canvas.Data[(y*canvas.Width+x)*3], canvas.Data[(y*canvas.Width+x)*3+1], canvas.Data[(y*canvas.Width+x)*3+2]
+}
+
+var canvas = Canvas{}
 var ws *websocket.Conn
-var place Canvas
+var place = Canvas{}
 
 func main() {
 	img, err := getPlacePng(placePngUrl)
@@ -77,12 +101,7 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-
-	canvas = Canvas{
-		Width:  (*img).Bounds().Dx(),
-		Height: (*img).Bounds().Dy(),
-		Data:   img,
-	}
+	canvas.FromImage(img)
 
 	fmt.Println("Successfully fetched place.png")
 
@@ -93,54 +112,80 @@ func main() {
 	fmt.Println("Successfully connected to websocket")
 	defer ws.Close()
 
+	go func() {
+		for {
+			_, message, err := ws.ReadMessage()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			x := binary.BigEndian.Uint32(message[0:4])
+			y := binary.BigEndian.Uint32(message[4:8])
+
+			r := message[8]
+			g := message[9]
+			b := message[10]
+
+			canvas.Data[(int(y)*canvas.Width+int(x))*3] = r
+			canvas.Data[(int(y)*canvas.Width+int(x))*3+1] = g
+			canvas.Data[(int(y)*canvas.Width+int(x))*3+2] = b
+		}
+	}()
+
 	placeImage, err := loadImage(imagePath)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-
-	place = Canvas{
-		Width:  (*placeImage).Bounds().Dx(),
-		Height: (*placeImage).Bounds().Dy(),
-		Data:   placeImage,
-	}
+	place.FromImage(placeImage)
 
 	fmt.Println("Successfully loaded image to place")
 
 	// time.Sleep(5 * time.Second)
 
-	for y := 0; y < place.Height; y++ {
-		for x := 0; x < place.Width; x++ {
+	for {
+		for y := 0; y < place.Height; y++ {
+			for x := 0; x < place.Width; x++ {
 
-			r, g, b, _ := (*place.Data).At(x, y).RGBA()
-			r = r >> 8
-			g = g >> 8
-			b = b >> 8
+				cx, cy := offset[0]+x, offset[1]+y
 
-			cr, cg, cb, _ := (*canvas.Data).At(offset[0]+x, offset[1]+y).RGBA()
-			cr = cr >> 8
-			cg = cg >> 8
-			cb = cb >> 8
+				r, g, b := place.At(x, y)
+				cr, cg, cb := canvas.At(cx, cy)
 
-			if r == cr && g == cg && b == cb {
-				continue
+				if r == cr && g == cg && b == cb {
+					continue
+				}
+
+				message := make([]byte, 11)
+
+				binary.BigEndian.PutUint32(message[0:4], uint32(cx))
+				binary.BigEndian.PutUint32(message[4:8], uint32(cy))
+
+				message[8] = uint8(r)
+				message[9] = uint8(g)
+				message[10] = uint8(b)
+
+				if err := ws.WriteMessage(websocket.BinaryMessage, message); err != nil {
+					fmt.Println(err)
+					// try to reconnect
+					ws.Close()
+
+					for {
+						if ws, err = connectWs(wsUrl); err != nil {
+							fmt.Println(err)
+							time.Sleep(2 * time.Second)
+							continue
+						}
+						break
+					}
+
+					return
+				}
+
+				time.Sleep(1500 * time.Microsecond)
 			}
-
-			message := make([]byte, 11)
-
-			binary.BigEndian.PutUint32(message[0:4], uint32(offset[0]+x))
-			binary.BigEndian.PutUint32(message[4:8], uint32(offset[1]+y))
-
-			message[8] = uint8(r)
-			message[9] = uint8(g)
-			message[10] = uint8(b)
-
-			if err := ws.WriteMessage(websocket.BinaryMessage, message); err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			time.Sleep(1 * time.Millisecond)
 		}
+
 	}
 }
