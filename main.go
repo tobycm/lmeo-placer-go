@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -67,6 +68,8 @@ type Canvas struct {
 	Width  int
 	Height int
 	Data   []byte
+
+	Mutex *sync.Mutex
 }
 
 func (canvas *Canvas) FromImage(img *image.Image) {
@@ -92,83 +95,33 @@ func (canvas *Canvas) At(x, y int) (uint8, uint8, uint8) {
 	return canvas.Data[(y*canvas.Width+x)*3], canvas.Data[(y*canvas.Width+x)*3+1], canvas.Data[(y*canvas.Width+x)*3+2]
 }
 
-var canvas = Canvas{}
-var ws *websocket.Conn
-var place = Canvas{}
-
-func main() {
-	if len(os.Args) > 3 {
-		x, err := strconv.Atoi(os.Args[1])
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		y, err := strconv.Atoi(os.Args[2])
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		offset = [2]int{x, y}
-
-		imagePath = os.Args[3]
-	}
-
-	img, err := getPlacePng(placePngUrl)
+func worker(start, stop int) {
+	ws, err := connectWs(wsUrl)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	canvas.FromImage(img)
-
-	fmt.Println("Successfully fetched place.png")
-
-	if ws, err = connectWs(wsUrl); err != nil {
-		fmt.Println(err)
-		return
-	}
-	fmt.Println("Successfully connected to websocket")
-	defer ws.Close()
-
-	go func() {
-		for {
-			_, message, err := ws.ReadMessage()
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-
-			x := binary.BigEndian.Uint32(message[0:4])
-			y := binary.BigEndian.Uint32(message[4:8])
-
-			r := message[8]
-			g := message[9]
-			b := message[10]
-
-			canvas.Data[(int(y)*canvas.Width+int(x))*3] = r
-			canvas.Data[(int(y)*canvas.Width+int(x))*3+1] = g
-			canvas.Data[(int(y)*canvas.Width+int(x))*3+2] = b
-		}
-	}()
-
-	placeImage, err := loadImage(imagePath)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	place.FromImage(placeImage)
-
-	fmt.Println("Successfully loaded image to place")
-
-	// time.Sleep(5 * time.Second)
 
 	for {
 		for y := 0; y < place.Height; y++ {
+			if y*place.Width < start || y*place.Width >= stop {
+				continue
+			}
+
 			for x := 0; x < place.Width; x++ {
+				if y*place.Width+x < start || y*place.Width+x >= stop {
+					continue
+				}
 
 				cx, cy := offset[0]+x, offset[1]+y
 
 				r, g, b := place.At(x, y)
+
+				canvas.Mutex.Lock()
+
 				cr, cg, cb := canvas.At(cx, cy)
+
+				canvas.Mutex.Unlock()
 
 				if r == cr && g == cg && b == cb {
 					continue
@@ -204,4 +157,86 @@ func main() {
 		}
 
 	}
+
+}
+
+var canvas = Canvas{Mutex: &sync.Mutex{}}
+var masterWs *websocket.Conn
+var place = Canvas{}
+
+func main() {
+	if len(os.Args) > 3 {
+		x, err := strconv.Atoi(os.Args[1])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		y, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		offset = [2]int{x, y}
+
+		imagePath = os.Args[3]
+	}
+
+	img, err := getPlacePng(placePngUrl)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	canvas.FromImage(img)
+
+	fmt.Println("Successfully fetched place.png")
+
+	if masterWs, err = connectWs(wsUrl); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println("Successfully connected to websocket")
+
+	go func() {
+		for {
+			_, message, err := masterWs.ReadMessage()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+
+			x := binary.BigEndian.Uint32(message[0:4])
+			y := binary.BigEndian.Uint32(message[4:8])
+
+			r := message[8]
+			g := message[9]
+			b := message[10]
+
+			canvas.Data[(int(y)*canvas.Width+int(x))*3] = r
+			canvas.Data[(int(y)*canvas.Width+int(x))*3+1] = g
+			canvas.Data[(int(y)*canvas.Width+int(x))*3+2] = b
+		}
+	}()
+
+	placeImage, err := loadImage(imagePath)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	place.FromImage(placeImage)
+
+	fmt.Println("Successfully loaded image to place")
+
+	// time.Sleep(5 * time.Second)
+
+	workers := 10
+	pixels := place.Width * place.Height
+	perWorker := pixels / workers
+
+	// 10 workers
+	for i := 0; i < 9; i++ {
+		go worker(i*perWorker, (i+1)*perWorker)
+	}
+
+	worker(0, pixels)
+
 }
