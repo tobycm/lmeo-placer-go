@@ -8,6 +8,7 @@ import (
 	_ "image/png"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -15,9 +16,9 @@ import (
 
 var placePngUrl = "https://foloplace.tobycm.dev/place.png"
 var wsUrl = "wss://foloplace.tobycm.dev/ws"
-var imagePath = "./elysia smol.png"
+var imagePath = "./elysia.png"
 
-var offset = [2]int{200, 306} // starting point, [x, y]
+var offset = [2]int{800, 800} // starting point, [x, y]
 
 func getPlacePng(url string) (*image.Image, error) {
 	response, err := http.Get(url)
@@ -96,6 +97,22 @@ var ws *websocket.Conn
 var place = Canvas{}
 
 func main() {
+	if len(os.Args) > 3 {
+		x, err := strconv.Atoi(os.Args[1])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		y, err := strconv.Atoi(os.Args[2])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		offset = [2]int{x, y}
+
+		imagePath = os.Args[3]
+	}
+
 	img, err := getPlacePng(placePngUrl)
 	if err != nil {
 		fmt.Println(err)
@@ -182,6 +199,8 @@ func main() {
 
 					return
 				}
+
+				// fmt.Println("Placed pixel at", cx, cy)
 
 				time.Sleep(1500 * time.Microsecond)
 			}
