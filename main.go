@@ -109,6 +109,8 @@ func worker(start, stop int) {
 			}
 
 			for x := 0; x < place.Width; x++ {
+				time.Sleep(1 * time.Millisecond)
+
 				if y*place.Width+x < start || y*place.Width+x >= stop {
 					continue
 				}
@@ -198,6 +200,7 @@ func main() {
 
 	go func() {
 		for {
+			// time.Sleep(100 * time.Microsecond)
 			_, message, err := masterWs.ReadMessage()
 			if err != nil {
 				fmt.Println(err)
