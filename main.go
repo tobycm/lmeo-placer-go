@@ -186,23 +186,20 @@ func main() {
 				if err := ws.WriteMessage(websocket.BinaryMessage, message); err != nil {
 					fmt.Println(err)
 					// try to reconnect
-					ws.Close()
 
 					for {
-						if ws, err = connectWs(wsUrl); err != nil {
-							fmt.Println(err)
-							time.Sleep(2 * time.Second)
-							continue
+						if ws, err = connectWs(wsUrl); err == nil {
+							fmt.Println("Reconnected to websocket")
+							break
 						}
-						break
-					}
 
-					return
+						time.Sleep(1 * time.Second)
+					}
 				}
 
 				// fmt.Println("Placed pixel at", cx, cy)
 
-				time.Sleep(1500 * time.Microsecond)
+				// time.Sleep(1500 * time.Microsecond)
 			}
 		}
 
