@@ -13,7 +13,7 @@ func worker(id int, works *Works) {
 	fmt.Printf("Worker %d connected to websocket\n", id)
 
 	for {
-		time.Sleep(250 * time.Microsecond)
+		time.Sleep(500 * time.Microsecond)
 
 		work := works.Get()
 
@@ -21,7 +21,7 @@ func worker(id int, works *Works) {
 			continue
 		}
 
-		// fmt.Println("Worker", id, "working on", work.x, work.y)
+		fmt.Println("Worker", id, "working on", work.x, work.y)
 
 		x, y := work.x, work.y
 		r, g, b := work.r, work.g, work.b
