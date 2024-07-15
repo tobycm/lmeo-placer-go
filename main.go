@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 )
 
 var (
-	placePngUrl = "http://localhost:32983/place.png"
-	wsUrl       = "ws://localhost:32983/ws"
+	placePngUrl = "https://foloplace.tobycm.dev/place.png"
+	wsUrl       = "wss://foloplace.tobycm.dev/ws"
 )
 
 var (
@@ -85,8 +86,9 @@ func main() {
 				x := binary.BigEndian.Uint32(message[0:4])
 				y := binary.BigEndian.Uint32(message[4:8])
 
-				if x < uint32(offset[0]) || y < uint32(offset[1]) || x >= uint32(offset[0]+canvas.Width) || y >= uint32(offset[1]+canvas.Height) {
+				if x < uint32(offset[0]) || y < uint32(offset[1]) || x >= uint32(offset[0]+place.Width) || y >= uint32(offset[1]+place.Height) {
 					message = message[11:]
+					time.Sleep(5 * time.Microsecond)
 					continue
 				}
 
@@ -100,6 +102,7 @@ func main() {
 				pr, pg, pb := place.At(int(x)-offset[0], int(y)-offset[1])
 
 				if r != pr || g != pg || b != pb {
+					fmt.Printf("Mismatch at %d, %d\n", x, y)
 					works.Add(&Work{x: int(x), y: int(y), r: pr, g: pg, b: pb})
 				}
 
@@ -110,13 +113,37 @@ func main() {
 
 	// time.Sleep(5 * time.Second)
 
-	workers := 10
+	workers := 1000
 
-	for i := 0; i < workers-1; i++ {
+	for i := 0; i < workers; i++ {
 		go worker(i, &works)
 	}
 
 	fmt.Println("Works:", len(works.Queue))
 
-	worker(-1, &works)
+	// go func() {
+	// 	for {
+	// 		time.Sleep(5 * time.Second)
+
+	// 		fmt.Println("Works:", len(works.Queue))
+	// 	}
+	// }()
+
+	// for {
+	// 	time.Sleep(100 * time.Millisecond)
+
+	// 	for y := 0; y < place.Height; y++ {
+	// 		for x := 0; x < place.Width; x++ {
+	// 			cx, cy := x+offset[0], y+offset[1]
+
+	// 			r, g, b := place.At(x, y)
+	// 			cr, cg, cb := canvas.At(cx, cy)
+
+	// 			if r != cr || g != cg || b != cb {
+	// 				// fmt.Printf("Mismatch at %d, %d\n", cx, cy)
+	// 				works.Add(&Work{x: cx, y: cy, r: r, g: g, b: b})
+	// 			}
+	// 		}
+	// 	}
+	// }
 }
