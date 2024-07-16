@@ -17,7 +17,7 @@ var (
 
 var (
 	place = Canvas{Mutex: &sync.Mutex{}}
-	works = Works{Queue: make([]*Work, 0), Mutex: &sync.Mutex{}}
+	works = Works{Queue: make([]Work, 0), Mutex: &sync.Mutex{}}
 )
 
 func load() {
@@ -47,7 +47,7 @@ func load() {
 
 			if r != cr || g != cg || b != cb {
 				// fmt.Printf("Mismatch at %d, %d\n", cx, cy)
-				works.Add(&Work{x: cx, y: cy, r: r, g: g, b: b})
+				works.Add(Work{x: cx, y: cy, r: r, g: g, b: b})
 			}
 		}
 	}
@@ -59,7 +59,7 @@ func makeTheMasterWork(ws *PlaceWs, works *Works) {
 
 		work := works.Get()
 
-		if work == nil {
+		if work.x == -1 {
 			continue
 		}
 
@@ -96,6 +96,15 @@ func main() {
 		for {
 			// time.Sleep(100 * time.Microsecond)
 			_, message, err := masterWs.Conn.ReadMessage()
+
+			// if messageType != websocket.BinaryMessage {
+			// 	fmt.Println("Received message type:", messageType)
+			// }
+
+			// if messageType == websocket.CloseMessage || messageType == websocket.CloseGoingAway {
+			// 	os.Exit(0)
+			// }
+
 			if err != nil {
 				fmt.Println(err)
 				masterWs.Reconnect()
@@ -122,12 +131,14 @@ func main() {
 
 				if r != pr || g != pg || b != pb {
 					// fmt.Printf("Mismatch at %d, %d\n", x, y)
-					works.Add(&Work{x: int(x), y: int(y), r: pr, g: pg, b: pb})
+					works.Add(Work{x: int(x), y: int(y), r: pr, g: pg, b: pb})
 
 					// fmt.Println("Works:", len(works.Queue))
 				}
 
 				message = message[11:]
+
+				// fmt.Println("Message left:", len(message))
 			}
 		}
 	}()
@@ -144,18 +155,19 @@ func main() {
 
 	fmt.Println("Works:", len(works.Queue))
 
-	func() {
-		for {
-			time.Sleep(5 * time.Second)
+	// signals := make(chan os.Signal, 1)
 
-			fmt.Println("Works:", len(works.Queue))
+	// go func() {
+	// 	for {
+	// 		sig := <-signals
 
-			if (len(works.Queue)) == 0 {
-				fmt.Println("All works done")
-				os.Exit(0)
-			}
-		}
-	}()
+	// 		if sig == os.Interrupt || sig == syscall.SIGTERM {
+	// 			fmt.Println("Exit signal received")
+	// 			masterWs.Close()
+	// 			os.Exit(0)
+	// 		}
+	// 	}
+	// }()
 
 	// for {
 	// 	time.Sleep(100 * time.Millisecond)
@@ -174,4 +186,19 @@ func main() {
 	// 		}
 	// 	}
 	// }
+
+	func() {
+		for {
+			time.Sleep(5 * time.Second)
+
+			fmt.Println("Works:", len(works.Queue))
+
+			if (len(works.Queue)) == 0 {
+				fmt.Println("All works done")
+				masterWs.Close()
+				os.Exit(0)
+			}
+		}
+	}()
+
 }

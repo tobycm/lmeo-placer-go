@@ -53,6 +53,11 @@ func (p *PlaceWs) Connect() error {
 	return nil
 }
 
+func (p *PlaceWs) Close() {
+	p.Conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	p.Conn.Close()
+}
+
 func (p *PlaceWs) Reconnect() {
 	for {
 		if err := p.Connect(); err == nil {

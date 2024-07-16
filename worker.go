@@ -17,7 +17,7 @@ func worker(id int, works *Works) {
 
 		work := works.Get()
 
-		if work == nil {
+		if work.x == -1 {
 			continue
 		}
 
@@ -40,24 +40,24 @@ type Work struct {
 }
 
 type Works struct {
-	Queue []*Work
+	Queue []Work
 
 	Mutex *sync.Mutex
 }
 
-func (works *Works) Add(work *Work) {
+func (works *Works) Add(work Work) {
 	works.Mutex.Lock()
 	defer works.Mutex.Unlock()
 
 	works.Queue = append(works.Queue, work)
 }
 
-func (works *Works) Get() *Work {
+func (works *Works) Get() Work {
 	works.Mutex.Lock()
 	defer works.Mutex.Unlock()
 
 	if len(works.Queue) == 0 {
-		return nil
+		return Work{x: -1, y: -1}
 	}
 
 	work := works.Queue[0]
@@ -70,12 +70,9 @@ func (works *Works) Compact() {
 	works.Mutex.Lock()
 	defer works.Mutex.Unlock()
 
-	newQueue := make([]*Work, 0)
+	newQueue := make([]Work, 0)
 
 	for _, work := range works.Queue {
-		if work == nil {
-			continue
-		}
 		newQueue = append(newQueue, work)
 	}
 
