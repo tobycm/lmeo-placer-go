@@ -21,7 +21,7 @@ func worker(id int, works *Works) {
 			continue
 		}
 
-		fmt.Println("Worker", id, "working on", work.x, work.y)
+		// fmt.Println("Worker", id, "working on", work.x, work.y)
 
 		x, y := work.x, work.y
 		r, g, b := work.r, work.g, work.b

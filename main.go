@@ -53,6 +53,25 @@ func load() {
 	}
 }
 
+func makeTheMasterWork(ws *PlaceWs, works *Works) {
+	for {
+		// time.Sleep(500 * time.Microsecond)
+
+		work := works.Get()
+
+		if work == nil {
+			continue
+		}
+
+		x, y := work.x, work.y
+		r, g, b := work.r, work.g, work.b
+
+		if err := ws.PlacePixel(x, y, r, g, b); err != nil {
+			fmt.Println(err)
+		}
+	}
+}
+
 func main() {
 	if len(os.Args) > 3 {
 		var err error
@@ -102,10 +121,10 @@ func main() {
 				pr, pg, pb := place.At(int(x)-offset[0], int(y)-offset[1])
 
 				if r != pr || g != pg || b != pb {
-					fmt.Printf("Mismatch at %d, %d\n", x, y)
+					// fmt.Printf("Mismatch at %d, %d\n", x, y)
 					works.Add(&Work{x: int(x), y: int(y), r: pr, g: pg, b: pb})
 
-					fmt.Println("Works:", len(works.Queue))
+					// fmt.Println("Works:", len(works.Queue))
 				}
 
 				message = message[11:]
@@ -115,11 +134,13 @@ func main() {
 
 	// time.Sleep(5 * time.Second)
 
-	workers := 2
+	workers := 0
 
 	for i := 0; i < workers; i++ {
 		go worker(i, &works)
 	}
+
+	go makeTheMasterWork(&masterWs, &works)
 
 	fmt.Println("Works:", len(works.Queue))
 
@@ -128,6 +149,11 @@ func main() {
 			time.Sleep(5 * time.Second)
 
 			fmt.Println("Works:", len(works.Queue))
+
+			if (len(works.Queue)) == 0 {
+				fmt.Println("All works done")
+				os.Exit(0)
+			}
 		}
 	}()
 
